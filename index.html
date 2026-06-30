@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lounge - Kassa Paneli</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0b0612; color: #e0d5f0; padding: 20px; }
+        h1, h2 { color: #bc95f9; text-shadow: 0 0 10px #bc95f9; margin-bottom: 20px; text-align: center; }
+        
+        .main-container { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px; }
+        .tables-section { flex: 2; min-width: 300px; background: #130b21; border: 1px solid #3d2461; padding: 20px; border-radius: 8px; }
+        .order-section { flex: 1; min-width: 300px; background: #130b21; border: 1px solid #3d2461; padding: 20px; border-radius: 8px; display: none; }
+        
+        /* Masaların Grid Sistemi */
+        .tables-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; }
+        .table-card { padding: 25px 10px; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .table-card:hover { transform: scale(1.05); }
+        .table-card.active-select { border: 2px solid #fff !important; box-shadow: 0 0 15px #bc95f9 !important; }
+        
+        /* Masa Status Rəngləri */
+        .empty { background: #1b4d22; border: 1px solid #2ecc71; color: #2ecc71; }
+        .busy { background: #661c1c; border: 1px solid #e74c3c; color: #e74c3c; }
+        
+        /* Sifariş Siyahısı Və Menyu */
+        select, button { display: block; width: 100%; padding: 12px; margin: 10px 0; background: #1c1032; border: 1px solid #5c3893; color: #fff; border-radius: 5px; outline: none; font-weight: bold; }
+        button { background: #6f3bbb; cursor: pointer; border: none; transition: 0.3s; }
+        button:hover { background: #8a4fff; box-shadow: 0 0 10px #8a4fff; }
+        .close-btn { background: #c0392b; }
+        .close-btn:hover { background: #e74c3c; box-shadow: 0 0 10px #e74c3c; }
+        
+        .order-item { background: #1c122e; border: 1px solid #3d2461; padding: 10px; margin: 5px 0; border-radius: 4px; display: flex; justify-content: space-between; }
+        .total-price { font-size: 20px; margin: 15px 0; text-align: center; color: #2ecc71; text-shadow: 0 0 5px #2ecc71; }
+    </style>
+</head>
+<body>
+
+    <h1>☕ LOUNGE TERMINAL (KASSA VƏ OFİSİANT)</h1>
+
+    <div class="main-container">
+        <!-- MASALARIN SİYAHISI -->
+        <div class="tables-section">
+            <h2>🪑 Masalar</h2>
+            <div id="tablesGrid" class="tables-grid">Yüklənir...</div>
+        </div>
+
+        <!-- SEÇİLMİŞ MASANIN SİFARİŞ PANELİ -->
+        <div id="orderSection" class="order-section">
+            <h2 id="selectedTableName">[ Masa Seçilməyib ]</h2>
+            
+            <div class="total-price">Cəmi: <span id="tableTotal">0.00</span> AZN</div>
+            
+            <div id="currentOrders" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;">
+                <!-- Cari sifarişlər bura yığılacaq -->
+            </div>
+
+            <hr style="border-color: #3d2461; margin: 15px 0;">
+            
+            <h3>➕ Sifariş Əlavə Et</h3>
+            <select id="menuSelect"><option value="">Məhsul seçin...</option></select>
+            <button onclick="addOrderToTable()">MASAYA ƏLAVƏ ET</button>
+            
+            <button onclick="closeTableBill()" class="close-btn" style="margin-top: 25px;">HESABI BAĞLA (Sıfırla)</button>
+        </div>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, set, update, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    const firebaseConfig = { databaseURL: "https://aahh-631a5-default-rtdb.firebaseio.com/" };
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    let currentSelectedTableId = null;
+    let localMenu = {};
+    let localTables = {};
+
+    // 1. CANLI MASALARI YÜKLƏMƏK VƏ YENİLƏMƏK
+    onValue(ref(database, 'lounge/tables'), (snapshot) => {
+        const grid = document.getElementById('tablesGrid');
+        grid.innerHTML = "";
+        if (snapshot.exists()) {
+            localTables = snapshot.val();
+            snapshot.forEach((child) => {
+                const id = child.key;
+                const data = child.val();
+                const isBusy = data.status === "busy";
+                const statusClass = isBusy ? "busy" : "empty";
+                const activeClass = id === currentSelectedTableId ? "active-select" : "";
+                
+                grid.innerHTML += `
+                    <div class="table-card ${statusClass} ${activeClass}" onclick="selectTable('${id}')">
+                        ${data.name}<br>
+                        <span style="font-size:12px;">${isBusy ? data.total + ' AZN' : 'Boş'}</span>
+                    </div>`;
+            });
+            
+            // Əgər açıq masa varsa, onun içini də canlı yenilə
+            if (currentSelectedTableId) {
+                selectTable(currentSelectedTableId);
+            }
+        } else {
+            grid.innerHTML = "<p>Müdir panelindən hələ masa əlavə edilməyib.</p>";
+        }
+    });
+
+    // 2. MENYUNU YÜKLƏMƏK (SELECT İÇİNƏ)
+    onValue(ref(database, 'lounge/menu'), (snapshot) => {
+        const select = document.getElementById('menuSelect');
+        select.innerHTML = '<option value="">Məhsul seçin...</option>';
+        localMenu = {};
+        if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+                const id = child.key;
+                const data = child.val();
+                localMenu[id] = data;
+                select.innerHTML += `<option value="${id}">${data.name} (${data.price} AZN)</option>`;
+            });
+        }
+    });
+
+    // 3. MASA SEÇİLDİKDƏ PANƏLİ AÇMAQ
+    window.selectTable = function(tableId) {
+        currentSelectedTableId = tableId;
+        
+        // Grid elementlərində aktiv klik bəzəyini yenilə
+        document.querySelectorAll('.table-card').forEach(card => card.classList.remove('active-select'));
+        
+        const tableData = localTables[tableId];
+        if (!tableData) return;
+
+        document.getElementById('selectedTableName').innerText = `[ ${tableData.name} ]`;
+        document.getElementById('tableTotal').innerText = parseFloat(tableData.total || 0).toFixed(2);
+        document.getElementById('orderSection').style.display = "block";
+
+        const ordersDiv = document.getElementById('currentOrders');
+        ordersDiv.innerHTML = "";
+
+        if (tableData.orders) {
+            Object.values(tableData.orders).forEach(item => {
+                ordersDiv.innerHTML += `
+                    <div class="order-item">
+                        <span>${item.name} x${item.qty}</span>
+                        <span>${(item.price * item.qty).toFixed(2)} AZN</span>
+                    </div>`;
+            });
+        } else {
+            ordersDiv.innerHTML = "<p style='color:#666; text-align:center;'>Sifariş yoxdur.</p>";
+        }
+    }
+
+    // 4. MASAYA SİFARİŞ ƏLAVƏ ETMƏK
+    window.addOrderToTable = function() {
+        if (!currentSelectedTableId) return alert("Zəhmət olmasa masa seçin!");
+        const menuId = document.getElementById('menuSelect').value;
+        if (!menuId) return alert("Məhsul seçin!");
+
+        const product = localMenu[menuId];
+        const table = localTables[currentSelectedTableId];
+        
+        let currentOrders = table.orders ? {...table.orders} : {};
+        
+        // Əgər eyni məhsul varsa sayını artır, yoxdursa yenisini yarat
+        if (currentOrders[menuId]) {
+            currentOrders[menuId].qty += 1;
+        } else {
+            currentOrders[menuId] = {
+                name: product.name,
+                price: product.price,
+                qty: 1
+            };
+        }
+
+        // Yeni ümumi məbləği hesabla
+        let newTotal = 0;
+        Object.values(currentOrders).forEach(item => {
+            newTotal += item.price * item.qty;
+        });
+
+        // Verilənlər bazasını yenilə
+        update(ref(database, 'lounge/tables/' + currentSelectedTableId), {
+            status: "busy",
+            orders: currentOrders,
+            total: parseFloat(newTotal.toFixed(2))
+        });
+    }
+
+    // 5. HESABI BAĞLAMAQ (MASANI SIFIRLAMAQ)
+    window.closeTableBill = function() {
+        if (!currentSelectedTableId) return;
+        const table = localTables[currentSelectedTableId];
+        
+        if (table.total == 0) {
+            return alert("Masa onsuz da boşdur!");
+        }
+
+        if (confirm(`${table.name} hesabını bağlamaq və masanı boşaltmaq istəyirsiniz? \nÜmumi məbləğ: ${table.total} AZN`)) {
+            
+            // Masanı sıfırla
+            set(ref(database, 'lounge/tables/' + currentSelectedTableId), {
+                name: table.name,
+                status: "empty",
+                total: 0,
+                orders: null
+            }).then(() => {
+                alert("Hesab bağlandı, masa təmizləndi!");
+                document.getElementById('orderSection').style.display = "none";
+                currentSelectedTableId = null;
+            });
+        }
+    }
+</script>
+</body>
+</html>
