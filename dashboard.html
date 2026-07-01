@@ -22,7 +22,6 @@
         button { background: #6f3bbb; font-weight: bold; cursor: pointer; border: none; }
         button:hover { background: #8a4fff; }
 
-        /* Canlı Masalar */
         .live-tables { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
         .table-badge { padding: 15px; border-radius: 5px; font-weight: bold; text-align: center; min-width: 120px; cursor: pointer; }
         .empty { background: #1b4d22; border: 1px solid #2ecc71; color: #2ecc71; }
@@ -30,6 +29,7 @@
         
         .list-item { background: #1c122e; border: 1px solid #3d2461; padding: 10px; margin: 5px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
         .del-btn { background: #c0392b; width: auto; padding: 5px 10px; margin: 0; font-size: 12px; }
+        .del-btn:hover { background: #e74c3c; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { padding: 10px; border: 1px solid #3d2461; text-align: left; }
@@ -38,7 +38,7 @@
 </head>
 <body>
 
-    <h1>🔮 LOUNGE MANAGEMENT SYSTEM (MÜDİR) v2.0</h1>
+    <h1>🔮 LOUNGE MANAGEMENT SYSTEM (MÜDİR)</h1>
     
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('live-tab')">📊 Canlı Monitor</button>
@@ -64,7 +64,7 @@
                 <div id="reportsList">Yaxın zamanda bağlanan kassa yoxdur.</div>
             </div>
             <div>
-                <h2>💸 Digər Xərclər / Ödənişlər (İcarə, Kommunal və s.)</h2>
+                <h2>💸 Digər Xərclər</h2>
                 <input type="text" id="expName" placeholder="Xərcin adı">
                 <input type="number" id="expAmount" placeholder="Məbləğ (AZN)">
                 <button onclick="addExpense()">XƏRCİ QEYD ET</button>
@@ -76,16 +76,15 @@
     <div id="inventory-tab" class="tab-content">
         <div class="grid-2">
             <div>
-                <h2>🍔 Menyuya Məhsul Əlavə Et</h2>
-                <input type="text" id="itemName" placeholder="Məhsul Adı">
+                <h2>🍔 Menyuya Məhsul Əlavə/Sil Et</h2>
+                <input type="text" id="itemName" placeholder="Məhsul Adı (Məs: Coca-Cola 1L)">
                 <input type="number" id="itemPrice" placeholder="Satış Qiyməti (AZN)" step="0.1">
-                <input type="text" id="itemImg" placeholder="Məhsul Şəkil Linki (Məs: https://.../kola.jpg)">
                 <button onclick="addMenuItem()">MENYUYA ƏLAVƏ ET</button>
-                <div id="menuList"></div>
+                <div id="menuList" style="margin-top:15px; max-height: 300px; overflow-y: auto;"></div>
             </div>
             <div>
                 <h2>📦 Mal Alışı (Stok Girişi)</h2>
-                <input type="text" id="stkName" placeholder="Alınan Malın Adı (Məs: Kola 20 ədəd)">
+                <input type="text" id="stkName" placeholder="Alınan Malın Adı">
                 <input type="number" id="stkCost" placeholder="Verilən Ümumi Pul (AZN)">
                 <button onclick="addStockEntry()">ALISI BAZAYA VUR</button>
                 <div id="stockList" style="margin-top:15px;"></div>
@@ -96,14 +95,14 @@
     <div id="staff-tab" class="tab-content">
         <div class="grid-2">
             <div>
-                <h2>👤 İşçi Əlavə Et & Maaş Qeydi</h2>
+                <h2>👤 İşçi Əlavə Et</h2>
                 <input type="text" id="staffName" placeholder="İşçinin Adı Soyadı">
                 <input type="number" id="staffSalary" placeholder="Aylıq Maaşı (AZN)">
                 <button onclick="addStaff()">İŞÇİNİ QEYD ET</button>
                 <div id="staffList"></div>
             </div>
             <div>
-                <h2>🕒 İşçi Giriş / Çıxış Logları (Canlı)</h2>
+                <h2>🕒 İşçi Giriş / Çıxış Logları</h2>
                 <div id="attendanceLogs">Log yoxdur.</div>
             </div>
         </div>
@@ -124,7 +123,7 @@
         event.target.classList.add('active');
     }
 
-    // CANLI MONITOR & MASALAR
+    // CANLI MONITOR
     onValue(ref(database, 'lounge/tables'), (snapshot) => {
         const container = document.getElementById('liveTablesContainer');
         container.innerHTML = "";
@@ -132,10 +131,7 @@
             snapshot.forEach(child => {
                 const id = child.key; const data = child.val();
                 const isBusy = data.status === "busy";
-                container.innerHTML += `
-                    <div class="table-badge ${isBusy?'busy':'empty'}" onclick="showTableDetails('${id}')">
-                        ${data.name}<br>${isBusy ? data.total+' AZN' : 'Boş'}
-                    </div>`;
+                container.innerHTML += `<div class="table-badge ${isBusy?'busy':'empty'}" onclick="showTableDetails('${id}')">${data.name}<br>${isBusy ? data.total+' AZN' : 'Boş'}</div>`;
             });
         }
     });
@@ -145,56 +141,47 @@
             if(!snapshot.exists()) return;
             const data = snapshot.val();
             document.getElementById('tableDetailsBox').style.display = "flex";
-            document.getElementById('detTableName').innerText = `[ ${data.name} ] - Cari Sifarişləri`;
+            document.getElementById('detTableName').innerText = `[ ${data.name} ] - Sifarişlər`;
             let html = "<table><tr><th>Məhsul</th><th>Say</th><th>Qiymət</th></tr>";
             if(data.orders) {
-                Object.values(data.orders).forEach(o => {
-                    html += `<tr><td>${o.name}</td><td>${o.qty}</td><td>${(o.price * o.qty).toFixed(2)} AZN</td></tr>`;
-                });
+                Object.values(data.orders).forEach(o => { html += `<tr><td>${o.name}</td><td>${o.qty}</td><td>${(o.price * o.qty).toFixed(2)} AZN</td></tr>`; });
                 html += `<tr><td colspan='2'><b>Cəmi:</b></td><td><b>${data.total} AZN</b></td></tr></table>`;
-            } else { html = "<p>Bu masa hələ sifariş verməyib.</p>"; }
+            } else { html = "<p>Bu masa boşdur.</p>"; }
             document.getElementById('detTableOrders').innerHTML = html;
         }, { onlyOnce: true });
     }
 
-    // KASSA HESABATLARI
-    onValue(ref(database, 'lounge/reports'), (snapshot) => {
-        const div = document.getElementById('reportsList'); div.innerHTML = "";
-        if(snapshot.exists()) {
-            snapshot.forEach(child => {
-                const r = child.val();
-                div.innerHTML += `<div class="list-item" style="border-color:#2ecc71;">
-                    <span>📅 <b>${r.date}</b> tarixində kassa bağlandı.</span>
-                    <span>💰 <b>Cəmi Gəlir: ${r.cash} AZN</b></span>
-                </div>`;
-            });
-        }
-    });
-
-    // MENYU İDARƏETMƏSİ
+    // MENYUYA ƏLAVƏ ET & MÜDİR PANELİNDƏN MƏHSUL SİLMƏK
     window.addMenuItem = function() {
         const name = document.getElementById('itemName').value.trim();
         const price = parseFloat(document.getElementById('itemPrice').value);
-        let img = document.getElementById('itemImg').value.trim() || "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200";
         if(!name || isNaN(price)) return alert("Məlumatları düz daxil edin");
-        push(ref(database, 'lounge/menu'), { name, price, img });
-        document.getElementById('itemName').value = ""; document.getElementById('itemPrice').value = ""; document.getElementById('itemImg').value = "";
+        push(ref(database, 'lounge/menu'), { name, price, img: "" });
+        document.getElementById('itemName').value = ""; document.getElementById('itemPrice').value = "";
     }
+
     onValue(ref(database, 'lounge/menu'), (snapshot) => {
         const div = document.getElementById('menuList'); div.innerHTML = "";
         if(snapshot.exists()) {
             snapshot.forEach(child => {
-                div.innerHTML += `<div class="list-item"><span>${child.val().name} - ${child.val().price} AZN</span><button class="del-btn" onclick="removeData('lounge/menu/${child.key}')">SİL</button></div>`;
+                div.innerHTML += `
+                    <div class="list-item">
+                        <span>🍔 ${child.val().name} - <b>${child.val().price} AZN</b></span>
+                        <button class="del-btn" onclick="removeData('lounge/menu/${child.key}')">MENYUDAN SİL</button>
+                    </div>`;
             });
         }
     });
 
-    // XƏRCLƏR VƏ MAL ALIŞI
+    // KASSA, XƏRCLƏR, İŞÇİLƏR
+    onValue(ref(database, 'lounge/reports'), (snapshot) => {
+        const div = document.getElementById('reportsList'); div.innerHTML = "";
+        if(snapshot.exists()) snapshot.forEach(c => { div.innerHTML += `<div class="list-item" style="border-color:#2ecc71;"><span>📅 ${c.val().date}</span><span>💰 <b>${c.val().cash} AZN</b></span></div>`; });
+    });
+
     window.addExpense = function() {
-        const name = document.getElementById('expName').value.trim();
-        const amount = document.getElementById('expAmount').value;
-        if(!name || !amount) return;
-        push(ref(database, 'lounge/expenses'), { name, amount, date: new Date().toLocaleString() });
+        const name = document.getElementById('expName').value.trim(); const amount = document.getElementById('expAmount').value;
+        if(!name || !amount) return; push(ref(database, 'lounge/expenses'), { name, amount, date: new Date().toLocaleString() });
         document.getElementById('expName').value = ""; document.getElementById('expAmount').value = "";
     }
     onValue(ref(database, 'lounge/expenses'), (snapshot) => {
@@ -203,10 +190,8 @@
     });
 
     window.addStockEntry = function() {
-        const name = document.getElementById('stkName').value.trim();
-        const cost = document.getElementById('stkCost').value;
-        if(!name || !cost) return;
-        push(ref(database, 'lounge/stockIn'), { name, cost, date: new Date().toLocaleString() });
+        const name = document.getElementById('stkName').value.trim(); const cost = document.getElementById('stkCost').value;
+        if(!name || !cost) return; push(ref(database, 'lounge/stockIn'), { name, cost, date: new Date().toLocaleString() });
         document.getElementById('stkName').value = ""; document.getElementById('stkCost').value = "";
     }
     onValue(ref(database, 'lounge/stockIn'), (snapshot) => {
@@ -214,17 +199,14 @@
         if(snapshot.exists()) snapshot.forEach(c => { div.innerHTML += `<div class="list-item"><span>📦 ${c.val().name} -> Xərc: ${c.val().cost} AZN</span></div>`; });
     });
 
-    // İŞÇİLƏR VƏ LOGLAR
     window.addStaff = function() {
-        const name = document.getElementById('staffName').value.trim();
-        const salary = document.getElementById('staffSalary').value;
-        if(!name || !salary) return;
-        push(ref(database, 'lounge/staff'), { name, salary });
+        const name = document.getElementById('staffName').value.trim(); const salary = document.getElementById('staffSalary').value;
+        if(!name || !salary) return; push(ref(database, 'lounge/staff'), { name, salary });
         document.getElementById('staffName').value = ""; document.getElementById('staffSalary').value = "";
     }
     onValue(ref(database, 'lounge/staff'), (snapshot) => {
         const div = document.getElementById('staffList'); div.innerHTML = "";
-        if(snapshot.exists()) snapshot.forEach(c => { div.innerHTML += `<div class="list-item"><span>👤 ${c.val().name} - Maaş: ${c.val().salary} AZN</span><button class="del-btn" onclick="removeData('lounge/staff/${c.key}')">SİL</button></div>`; });
+        if(snapshot.exists()) snapshot.forEach(c => { div.innerHTML += `<div class="list-item"><span>👤 ${c.val().name}</span><button class="del-btn" onclick="removeData('lounge/staff/${c.key}')">SİL</button></div>`; });
     });
     onValue(ref(database, 'lounge/attendance'), (snapshot) => {
         const div = document.getElementById('attendanceLogs'); div.innerHTML = "";
