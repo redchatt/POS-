@@ -12,7 +12,6 @@
         .staff-bar { background: #130b21; border: 1px solid #3d2461; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
         .staff-bar select, .staff-bar button { width: auto; margin: 0; }
         
-        /* Canlı Növbə Sayğacı Vizualı */
         .active-staff-box { background: #1c1032; border: 1px solid #bc95f9; padding: 8px 15px; border-radius: 5px; font-weight: bold; color: #bc95f9; box-shadow: 0 0 10px rgba(188,149,249,0.3); display: none; }
 
         .main-container { display: flex; flex-wrap: wrap; gap: 20px; }
@@ -35,7 +34,11 @@
 
         button, select { background: #6f3bbb; color: #fff; padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; margin: 5px 0; }
         button:hover { background: #8a4fff; }
-        .order-item { background: #1c122e; padding: 8px; margin: 4px 0; display: flex; justify-content: space-between; font-size: 13px; border: 1px solid #3d2461; }
+        
+        /* Yenilənmiş Sifariş Siyahısı və Kiçik Sil Düyməsi */
+        .order-item { background: #1c122e; padding: 8px; margin: 4px 0; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border: 1px solid #3d2461; }
+        .item-del-btn { background: #c0392b; color: white; border: none; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; margin-left: 10px; width: auto; display: inline-block; }
+        .item-del-btn:hover { background: #e74c3c; }
     </style>
 </head>
 <body>
@@ -49,7 +52,7 @@
         <button onclick="staffLog('Çıxış Etdi')" style="background:#c0392b;">❌ ÇIXIŞ</button>
         
         <div id="activeStaffBox" class="active-staff-box">
-            👤 <span id="activeStaffName">Niyazi</span> | ⏱ <span id="staffTimer">00:00:00</span>
+            👤 <span id="activeStaffName">...</span> | ⏱ <span id="staffTimer">00:00:00</span>
         </div>
         
         <button onclick="finishDayWork()" style="background:#d35400; margin-left:auto;">🏁 GÜNÜ TAMAMLA</button>
@@ -103,7 +106,6 @@
         if(snapshot.exists()) snapshot.forEach(c => { select.innerHTML += `<option value="${c.val().name}">${c.val().name}</option>`; });
     });
 
-    // OPTİMİZASİYA OLUNMUŞ SMART ŞƏKİL YÜKLƏYİCİ
     onValue(ref(database, 'lounge/menu'), (snapshot) => {
         const grid = document.getElementById('menuGrid'); grid.innerHTML = "";
         if(snapshot.exists()) {
@@ -134,27 +136,21 @@
         }
     });
 
-    // İŞÇİ GİRİŞ / ÇIXİŞ VƏ SAAT SAYĞACI LOGİKASI
     window.staffLog = function(type) {
         const staff = document.getElementById('staffSelect').value;
         if(!staff) return alert("İşçi seçin!");
-        
         push(ref(database, 'lounge/attendance'), { staff, type, time: new Date().toLocaleString() });
         
         if(type === 'Giriş Etdi') {
             document.getElementById('activeStaffName').innerText = staff;
             document.getElementById('activeStaffBox').style.display = "block";
-            
-            // Sayğacı sıfırla və başlat
-            clearInterval(timerInterval);
-            totalSeconds = 0;
+            clearInterval(timerInterval); totalSeconds = 0;
             timerInterval = setInterval(updateTimer, 1000);
-            alert(`${staff} növbəyə başladı! Vaxt sayılır.`);
+            alert(`${staff} növbəyə başladı!`);
         } else {
-            // Çıxış edəndə sayğacı dayandır və gizlə
             clearInterval(timerInterval);
             document.getElementById('activeStaffBox').style.display = "none";
-            alert(`${staff} növbəni bitirdi! Ümumi işlədiyi vaxt: ${document.getElementById('staffTimer').innerText}`);
+            alert(`${staff} növbəni bitirdi!`);
         }
     }
 
@@ -172,8 +168,19 @@
         document.getElementById('tableTotal').innerText = parseFloat(t.total || 0).toFixed(2);
         document.getElementById('orderSection').style.display = "block";
         const div = document.getElementById('currentOrders'); div.innerHTML = "";
+        
         if(t.orders) {
-            Object.values(t.orders).forEach(o => { div.innerHTML += `<div class="order-item"><span>${o.name} x${o.qty}</span><span>${(o.price*o.qty).toFixed(2)} AZN</span></div>`; });
+            Object.keys(t.orders).forEach(menuId => {
+                const o = t.orders[menuId];
+                div.innerHTML += `
+                    <div class="order-item">
+                        <span>${o.name} x${o.qty}</span>
+                        <div>
+                            <span>${(o.price * o.qty).toFixed(2)} AZN</span>
+                            <button class="item-del-btn" onclick="removeOrderOne('${menuId}')">❌</button>
+                        </div>
+                    </div>`;
+            });
         } else { div.innerHTML = "<p style='color:#555;text-align:center;'>Sifariş yoxdur.</p>"; }
     }
 
@@ -184,6 +191,36 @@
         if(orders[menuId]) { orders[menuId].qty += 1; } else { orders[menuId] = { name, price, qty: 1 }; }
         let total = 0; Object.values(orders).forEach(o => total += o.price * o.qty);
         update(ref(database, `lounge/tables/${currentTableId}`), { status:"busy", orders, total: parseFloat(total.toFixed(2)) });
+    }
+
+    // MASADAN SİFARİŞİN SAYINI AZALTMAQ VƏ YA SİLMƏK LOGİKASI
+    window.removeOrderOne = function(menuId) {
+        if(!currentTableId) return;
+        const t = localTables[currentTableId];
+        if(!t || !t.orders || !t.orders[menuId]) return;
+
+        let orders = {...t.orders};
+        
+        if(orders[menuId].qty > 1) {
+            orders[menuId].qty -= 1; // Sayı 1 ədəd azalt
+        } else {
+            delete orders[menuId]; // Əgər 1 dənə idisə, siyahıdan tam sil
+        }
+
+        // Yeni ümumi məbləği hesabla
+        let total = 0;
+        Object.values(orders).forEach(o => total += o.price * o.qty);
+        
+        // Əgər masada heç bir sifariş qalmadısa masanı avtomatik boşalt
+        const hasOrders = Object.keys(orders).length > 0;
+        const newStatus = hasOrders ? "busy" : "empty";
+        const finalOrders = hasOrders ? orders : null;
+
+        update(ref(database, `lounge/tables/${currentTableId}`), { 
+            status: newStatus, 
+            orders: finalOrders, 
+            total: parseFloat(total.toFixed(2)) 
+        });
     }
 
     window.closeTableBill = function() {
