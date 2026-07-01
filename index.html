@@ -21,12 +21,12 @@
         .empty { background: #1b4d22; border: 1px solid #2ecc71; color: #2ecc71; }
         .busy { background: #661c1c; border: 1px solid #e74c3c; color: #e74c3c; }
         
-        /* Yenilənmiş və Stabil Menyu Grid Sistemi */
+        /* Yenilənmiş Menyu Grid Sistemi */
         .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; max-height: 280px; overflow-y: auto; padding: 10px; background: #0b0612; border: 1px solid #3d2461; margin-top: 10px; }
         .menu-card { background: #1c1032; border: 1px solid #5c3893; border-radius: 8px; overflow: hidden; text-align: center; cursor: pointer; padding-bottom: 8px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 160px; transition: 0.2s; }
         .menu-card:hover { transform: translateY(-3px); box-shadow: 0 0 10px #bc95f9; }
         
-        /* Şəkilləri Çərçivəyə Sığışdıran CSS */
+        /* Şəkillərin Tam Oturması və Qırılmaması Üçün Çərçivə */
         .img-container { width: 100%; height: 90px; background: #22143b; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 1px solid #5c3893; }
         .img-container img { width: 100%; height: 100%; object-fit: cover; display: block; }
         
@@ -96,18 +96,32 @@
         if(snapshot.exists()) snapshot.forEach(c => { select.innerHTML += `<option value="${c.val().name}">${c.val().name}</option>`; });
     });
 
-    // YENİ GÜVENLİ MENYU YÜKLƏMƏ METODU
+    // 100% ZƏMANƏTLİ, ADALARA GÖRƏ AVTOMATİK ŞƏKİL TANIMA SİSTEMİ
     onValue(ref(database, 'lounge/menu'), (snapshot) => {
         const grid = document.getElementById('menuGrid'); grid.innerHTML = "";
         if(snapshot.exists()) {
             snapshot.forEach(child => {
                 const id = child.key; const m = child.val();
-                const fallbackImg = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200";
+                
+                let productImg = m.img;
+                const nameUpper = m.name.toUpperCase();
+
+                // Ada görə şəkil yoxlanışı
+                if (nameUpper.includes("COCA COLA") || nameUpper.includes("COLA") || nameUpper.includes("KOLA")) {
+                    productImg = "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=200&auto=format&fit=crop";
+                } else if (nameUpper.includes("QƏLYAN") || nameUpper.includes("QELYAN") || nameUpper.includes("HOOKAH")) {
+                    productImg = "https://images.unsplash.com/photo-1542332606-b2d1c6381e4f?q=80&w=200&auto=format&fit=crop";
+                } else if (nameUpper.includes("ÇAY") || nameUpper.includes("CAY") || nameUpper.includes("TEA")) {
+                    productImg = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?q=80&w=200&auto=format&fit=crop";
+                } else {
+                    // Sistemdə olmayan fərqli bir məhsul daxil edilərsə standart kokteyl görünəcək
+                    productImg = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200";
+                }
                 
                 grid.innerHTML += `
                     <div class="menu-card" onclick="addOrder('${id}','${m.name}',${m.price})">
                         <div class="img-container">
-                            <img src="${m.img}" onerror="this.onerror=null; this.src='${fallbackImg}';">
+                            <img src="${productImg}" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200';">
                         </div>
                         <span>${m.name}</span>
                         <span style="color:#2ecc71;">${m.price} AZN</span>
