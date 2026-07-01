@@ -35,7 +35,6 @@
         button, select { background: #6f3bbb; color: #fff; padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; margin: 5px 0; }
         button:hover { background: #8a4fff; }
         
-        /* Yenilənmiş Sifariş Siyahısı və Kiçik Sil Düyməsi */
         .order-item { background: #1c122e; padding: 8px; margin: 4px 0; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border: 1px solid #3d2461; }
         .item-del-btn { background: #c0392b; color: white; border: none; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; margin-left: 10px; width: auto; display: inline-block; }
         .item-del-btn:hover { background: #e74c3c; }
@@ -106,28 +105,41 @@
         if(snapshot.exists()) snapshot.forEach(c => { select.innerHTML += `<option value="${c.val().name}">${c.val().name}</option>`; });
     });
 
+    // 🌐 BÜTÜN DÜNYA MEHSULLARINI AVTOMATİK TAPMAQLA YÜKLƏYƏN SMART METOD
     onValue(ref(database, 'lounge/menu'), (snapshot) => {
         const grid = document.getElementById('menuGrid'); grid.innerHTML = "";
         if(snapshot.exists()) {
             snapshot.forEach(child => {
                 const id = child.key; const m = child.val();
-                let productImg = m.img;
                 const nameLower = m.name.toLowerCase();
-
-                if (nameLower.includes("cola") || nameLower.includes("kola") || nameLower.includes("coca")) {
-                    productImg = "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=200&auto=format&fit=crop";
-                } else if (nameLower.includes("qəlyan") || nameLower.includes("qelyan") || nameLower.includes("hookah")) {
-                    productImg = "https://images.unsplash.com/photo-1542332606-b2d1c6381e4f?q=80&w=200&auto=format&fit=crop";
-                } else if (nameLower.includes("çay") || nameLower.includes("cay") || nameLower.includes("tea")) {
-                    productImg = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?q=80&w=200&auto=format&fit=crop";
-                } else {
-                    productImg = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200";
-                }
                 
+                // Məhsulun adına görə Unsplash-dan ingiliscə açar sözü tapırıq
+                let keyword = "drink"; 
+                if (nameLower.includes("cola") || nameLower.includes("kola") || nameLower.includes("coca")) keyword = "coca-cola";
+                else if (nameLower.includes("qəlyan") || nameLower.includes("qelyan") || nameLower.includes("hookah")) keyword = "hookah";
+                else if (nameLower.includes("çay") || nameLower.includes("cay") || nameLower.includes("tea")) keyword = "tea";
+                else if (nameLower.includes("pizza")) keyword = "pizza";
+                else if (nameLower.includes("burger")) keyword = "burger";
+                else if (nameLower.includes("qəhvə") || nameLower.includes("kofe") || nameLower.includes("coffee")) keyword = "coffee";
+                else if (nameLower.includes("su") || nameLower.includes("water")) keyword = "water";
+                else if (nameLower.includes("fanta")) keyword = "fanta";
+                else if (nameLower.includes("sprite")) keyword = "sprite";
+                else if (nameLower.includes("şirə") || nameLower.includes("sire") || nameLower.includes("juice")) keyword = "juice";
+                else {
+                    // Əgər spesifik bir şey deyilsə, sözün özünü birbaşa ingiliscəyə bənzədib axtarır
+                    keyword = nameLower.replace(/[əe]/g, 'e').replace(/ç/g, 'c').replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ö/g, 'o').replace(/ü/g, 'u');
+                }
+
+                // AI Sürətli Şəkil Linki Qurucusu
+                const productImg = `https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200&auto=format&fit=crop&sig=${encodeURIComponent(keyword)}`;
+                const searchImg = `https://source.unsplash.com/featured/200x150/?${keyword}`;
+
                 grid.innerHTML += `
                     <div class="menu-card" onclick="addOrder('${id}','${m.name}',${m.price})">
                         <div class="img-container">
-                            <img src="${productImg}" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200';">
+                            <img src="https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200" 
+                                 style="background-image: url('https://source.unsplash.com/200x150/?${keyword}'); background-size: cover;"
+                                 onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200';">
                         </div>
                         <span>${m.name}</span>
                         <span style="color:#2ecc71;">${m.price} AZN</span>
@@ -169,7 +181,7 @@
         document.getElementById('orderSection').style.display = "block";
         const div = document.getElementById('currentOrders'); div.innerHTML = "";
         
-        if(t.orders) {
+        if(t && t.orders) {
             Object.keys(t.orders).forEach(menuId => {
                 const o = t.orders[menuId];
                 div.innerHTML += `
@@ -193,34 +205,29 @@
         update(ref(database, `lounge/tables/${currentTableId}`), { status:"busy", orders, total: parseFloat(total.toFixed(2)) });
     }
 
-    // MASADAN SİFARİŞİN SAYINI AZALTMAQ VƏ YA SİLMƏK LOGİKASI
     window.removeOrderOne = function(menuId) {
         if(!currentTableId) return;
         const t = localTables[currentTableId];
         if(!t || !t.orders || !t.orders[menuId]) return;
 
         let orders = {...t.orders};
-        
         if(orders[menuId].qty > 1) {
-            orders[menuId].qty -= 1; // Sayı 1 ədəd azalt
+            orders[menuId].qty -= 1;
         } else {
-            delete orders[menuId]; // Əgər 1 dənə idisə, siyahıdan tam sil
+            delete orders[menuId];
         }
 
-        // Yeni ümumi məbləği hesabla
         let total = 0;
         Object.values(orders).forEach(o => total += o.price * o.qty);
         
-        // Əgər masada heç bir sifariş qalmadısa masanı avtomatik boşalt
         const hasOrders = Object.keys(orders).length > 0;
-        const newStatus = hasOrders ? "busy" : "empty";
-        const finalOrders = hasOrders ? orders : null;
-
-        update(ref(database, `lounge/tables/${currentTableId}`), { 
-            status: newStatus, 
-            orders: finalOrders, 
-            total: parseFloat(total.toFixed(2)) 
-        });
+        
+        if(hasOrders) {
+            update(ref(database, `lounge/tables/${currentTableId}`), { status: "busy", orders: orders, total: parseFloat(total.toFixed(2)) });
+        } else {
+            set(ref(database, `lounge/tables/${currentTableId}`), { name: t.name, status: "empty", total: 0, orders: null });
+            document.getElementById('orderSection').style.display = "none"; currentTableId = null;
+        }
     }
 
     window.closeTableBill = function() {
