@@ -9,8 +9,11 @@
         body { background: #0b0612; color: #e0d5f0; padding: 20px; }
         h1, h2 { color: #bc95f9; text-shadow: 0 0 10px #bc95f9; text-align: center; margin-bottom: 20px; }
         
-        .staff-bar { background: #130b21; border: 1px solid #3d2461; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 20px; }
+        .staff-bar { background: #130b21; border: 1px solid #3d2461; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
         .staff-bar select, .staff-bar button { width: auto; margin: 0; }
+        
+        /* Canlı Növbə Sayğacı Vizualı */
+        .active-staff-box { background: #1c1032; border: 1px solid #bc95f9; padding: 8px 15px; border-radius: 5px; font-weight: bold; color: #bc95f9; box-shadow: 0 0 10px rgba(188,149,249,0.3); display: none; }
 
         .main-container { display: flex; flex-wrap: wrap; gap: 20px; }
         .tables-section { flex: 1.5; background: #130b21; border: 1px solid #3d2461; padding: 20px; border-radius: 8px; }
@@ -21,12 +24,10 @@
         .empty { background: #1b4d22; border: 1px solid #2ecc71; color: #2ecc71; }
         .busy { background: #661c1c; border: 1px solid #e74c3c; color: #e74c3c; }
         
-        /* Yenilənmiş Menyu Grid Sistemi */
         .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; max-height: 280px; overflow-y: auto; padding: 10px; background: #0b0612; border: 1px solid #3d2461; margin-top: 10px; }
         .menu-card { background: #1c1032; border: 1px solid #5c3893; border-radius: 8px; overflow: hidden; text-align: center; cursor: pointer; padding-bottom: 8px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 160px; transition: 0.2s; }
         .menu-card:hover { transform: translateY(-3px); box-shadow: 0 0 10px #bc95f9; }
         
-        /* Şəkillərin Tam Oturması və Qırılmaması Üçün Çərçivə */
         .img-container { width: 100%; height: 90px; background: #22143b; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 1px solid #5c3893; }
         .img-container img { width: 100%; height: 100%; object-fit: cover; display: block; }
         
@@ -46,6 +47,11 @@
         <select id="staffSelect"><option value="">İşçi Seçin...</option></select>
         <button onclick="staffLog('Giriş Etdi')">▶ GİRİŞ</button>
         <button onclick="staffLog('Çıxış Etdi')" style="background:#c0392b;">❌ ÇIXIŞ</button>
+        
+        <div id="activeStaffBox" class="active-staff-box">
+            👤 <span id="activeStaffName">Niyazi</span> | ⏱ <span id="staffTimer">00:00:00</span>
+        </div>
+        
         <button onclick="finishDayWork()" style="background:#d35400; margin-left:auto;">🏁 GÜNÜ TAMAMLA</button>
     </div>
 
@@ -78,6 +84,7 @@
     const database = getDatabase(app);
 
     let currentTableId = null; let localTables = {}; let dayTotalCash = 0;
+    let timerInterval = null; let totalSeconds = 0;
 
     onValue(ref(database, 'lounge/tables'), (snapshot) => {
         const grid = document.getElementById('tablesGrid'); grid.innerHTML = "";
@@ -96,25 +103,22 @@
         if(snapshot.exists()) snapshot.forEach(c => { select.innerHTML += `<option value="${c.val().name}">${c.val().name}</option>`; });
     });
 
-    // 100% ZƏMANƏTLİ, ADALARA GÖRƏ AVTOMATİK ŞƏKİL TANIMA SİSTEMİ
+    // OPTİMİZASİYA OLUNMUŞ SMART ŞƏKİL YÜKLƏYİCİ
     onValue(ref(database, 'lounge/menu'), (snapshot) => {
         const grid = document.getElementById('menuGrid'); grid.innerHTML = "";
         if(snapshot.exists()) {
             snapshot.forEach(child => {
                 const id = child.key; const m = child.val();
-                
                 let productImg = m.img;
-                const nameUpper = m.name.toUpperCase();
+                const nameLower = m.name.toLowerCase();
 
-                // Ada görə şəkil yoxlanışı
-                if (nameUpper.includes("COCA COLA") || nameUpper.includes("COLA") || nameUpper.includes("KOLA")) {
+                if (nameLower.includes("cola") || nameLower.includes("kola") || nameLower.includes("coca")) {
                     productImg = "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=200&auto=format&fit=crop";
-                } else if (nameUpper.includes("QƏLYAN") || nameUpper.includes("QELYAN") || nameUpper.includes("HOOKAH")) {
+                } else if (nameLower.includes("qəlyan") || nameLower.includes("qelyan") || nameLower.includes("hookah")) {
                     productImg = "https://images.unsplash.com/photo-1542332606-b2d1c6381e4f?q=80&w=200&auto=format&fit=crop";
-                } else if (nameUpper.includes("ÇAY") || nameUpper.includes("CAY") || nameUpper.includes("TEA")) {
+                } else if (nameLower.includes("çay") || nameLower.includes("cay") || nameLower.includes("tea")) {
                     productImg = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?q=80&w=200&auto=format&fit=crop";
                 } else {
-                    // Sistemdə olmayan fərqli bir məhsul daxil edilərsə standart kokteyl görünəcək
                     productImg = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=200";
                 }
                 
@@ -130,11 +134,36 @@
         }
     });
 
+    // İŞÇİ GİRİŞ / ÇIXİŞ VƏ SAAT SAYĞACI LOGİKASI
     window.staffLog = function(type) {
         const staff = document.getElementById('staffSelect').value;
         if(!staff) return alert("İşçi seçin!");
+        
         push(ref(database, 'lounge/attendance'), { staff, type, time: new Date().toLocaleString() });
-        alert(`${staff} üçün ${type} qeyd olundu!`);
+        
+        if(type === 'Giriş Etdi') {
+            document.getElementById('activeStaffName').innerText = staff;
+            document.getElementById('activeStaffBox').style.display = "block";
+            
+            // Sayğacı sıfırla və başlat
+            clearInterval(timerInterval);
+            totalSeconds = 0;
+            timerInterval = setInterval(updateTimer, 1000);
+            alert(`${staff} növbəyə başladı! Vaxt sayılır.`);
+        } else {
+            // Çıxış edəndə sayğacı dayandır və gizlə
+            clearInterval(timerInterval);
+            document.getElementById('activeStaffBox').style.display = "none";
+            alert(`${staff} növbəni bitirdi! Ümumi işlədiyi vaxt: ${document.getElementById('staffTimer').innerText}`);
+        }
+    }
+
+    function updateTimer() {
+        totalSeconds++;
+        const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+        document.getElementById('staffTimer').innerText = `${hours}:${minutes}:${seconds}`;
     }
 
     window.selectTable = function(id) {
